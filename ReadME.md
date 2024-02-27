@@ -278,6 +278,15 @@ Here the flow with UDF
 
 ![case with UDF](img/with_hash.png)
 
+## Add new data files
+
+THE SFTP Connector can not work with identifical file names. So please add new file names into `data` directory. 
+The connector is looking for `*.json` file. Add a new file to `data` dir.
+
+```bash
+echo $'{"id":3,"first_name":"Carsten","last_name":"Muetzlitz","email":"cmutzlitz@confluent.io","gender":"Male","ip_address":"1.84.142.254","last_login":"2024-02-27T06:26:23Z","account_balance":2.22,"country":"DE","favorite_color":"#4eaefa"}\n{"id":4,"first_name":"Suvad","last_name":"Sahovic","email":"suvad@confluent.io","gender":"Male","ip_address":"2.159.106.63","last_login":"2024-02-01T00:29:56Z","account_balance":3.33,"country":"DE","favorite_color":"#e8f686"}' > "data/new_file1.json"
+```
+
 ## Stop your system
 Disable SFTP Server on your Mac. Open System Preferences and select Sharing.Next, make sure that Remote Login is disabled.
 Stop your CP installation:
