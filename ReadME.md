@@ -318,7 +318,8 @@ curl -X GET http://localhost:8081/subjects
 ``` 
 
 ## Stop your system
-Disable SFTP Server on your Mac. Open System Preferences and select Sharing.Next, make sure that Remote Login is disabled.
+Disable SFTP Server on your Mac. Open System Preferences and select File Sharing. Next, make sure that Remote Login is disabled.
+
 Stop your CP installation:
 ```bash
 confluent local services stop
