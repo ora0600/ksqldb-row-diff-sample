@@ -310,7 +310,12 @@ ksql> select w.*
 ksql> exit;         
 ```
 
-Now, a process have to be implemented to change the data, so that system list is up2date,
+Now, a process have to be implemented to change the data, so that system list is up2date.
+
+PS. This sample is completely working wihout Schemas. see
+```bash
+curl -X GET http://localhost:8081/subjects
+``` 
 
 ## Stop your system
 Disable SFTP Server on your Mac. Open System Preferences and select Sharing.Next, make sure that Remote Login is disabled.
