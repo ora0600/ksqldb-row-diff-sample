@@ -1,8 +1,8 @@
-# Sample use: Diff compare of records in ksql
+# Sample use case: Diff compare of records in ksql
 
 This simple case show how to find out if a record and therefore a column of a weekley list is changed compared with the system list.
-We do the first case completely without help in SQL.
-The seconds case we use the help of a hash, which was implemented with  UDF in java.
+We do the first sample case completely without help with pure SQL.
+The seconds case we use the help of a hash, which was implemented with UDF in java.
 
 In the lab we simluate the data coming from a list, which will be load with the Confluent SFTP Connector.
 
@@ -12,13 +12,11 @@ Please do have following components installed on your Macbook.
 
 * Confluent Platform 7.6 installed
 * Confluent cli installed
-* Jave dev installed including JDK 1.8 (in my case) and graddle
+* Java dev installed including JDK 1.8 (in my case) and graddle
 
-Test Java Version: (my udf jar was compiled with JDK 8), be aware that JDK 1.8 is not supported ynamore with CP 8.0
+Test Java Version: (my UDF jar was compiled with JDK 8), be aware that JDK 1.8 is not supported anymore with CP 8.0.
 ```bash
 java -version
-openjdk version "1.8.0_322"
-OpenJDK Runtime Environment Corretto-8.322.06.1 (build 1.8.0_322-b06)
 ```
 
 ## Clone Repository
@@ -41,9 +39,9 @@ install connector in CP environment. Please be aware that this is a commercial c
 ```bash
 confluent-hub install confluentinc/kafka-connect-sftp:3.2.1
 ``` 
-Enable SFTP Server on your Mac open System Preferences and select Sharing. Next, make sure that Remote Login is enabled. 
+Enable SFTP Server on your Mac open System Preferences and select File Sharing (and you need a Mac User to Login. For this  I created a new User). Next, make sure that Remote Login is enabled. 
 
-change the properties in `jsonsftp.properties` file:
+Change the properties in `jsonsftp.properties` file:
 ```bash
 input.path=/your-path/data
 error.path=/your-path/error
@@ -85,11 +83,12 @@ Create Topic
 ```bash
 kafka-topics --bootstrap-server localhost:9092 --create --partitions 1 --replication-factor 1 --topic sftp-users
 ```
-Open Control Center use URL `http://localhost:9021/clusters`
+Open [Control Center](http://localhost:9021/clusters) use URL `http://localhost:9021/clusters`
 
-Install Official User List via ksqlDB, we create it now, because When doing a stream-table join, your table messages must already exists. 
-Please use the ksqlDB Editor in Control Center or the ksql cli `ksql http://localhost:8088`
+Install "official User List" via ksqlDB INSERTS, we create it now, because When doing a stream-table join, your table messages must already exists. 
+Please use the ksqlDB Editor in Control Center or the ksql cli:
 ```bash
+ksql http://localhost:8088
 # Create Orignal USERS
  ksql> CREATE TABLE USERS (
     id bigint primary key,
@@ -118,21 +117,27 @@ INSERT INTO USERS (id, first_name, last_name, email, gender, ip_address ,last_lo
       VALUES (4, 'Evi', 'Scheider', 'evi@confluent.io', 'Female', '153.239.187.49', '2024-01-31T12:27:12Z', 25000, 'DE', '#73893a');
 INSERT INTO USERS (id, first_name, last_name, email, gender, ip_address ,last_login , account_balance, country, favorite_color ) 
       VALUES (5, 'Suvad' , 'Sahovic' ,'suvad@confluent.io', 'Male', '120.181.75.48', '2024-02-15T06:01:15Z', 40000, 'DE', '#f09bc0');
+ksql> select * from USERS emit changes;      
+ksql> exit;
+``` 
 
-Start Connector
+Start Connector, make sure you are in the correct folder and that Remote Login is enabled.
 ```bash
-cd ..
+# Check if you are in the main folder: ksqldb-row-diff-sample
+pwd
 # Start connector
 confluent local services connect connector load SchemaLessJsonSftp --config jsonsftp.properties
 # Status Connector
 confluent local services connect connector status SchemaLessJsonSftp
-# Consume
+# Consume from both topics
+# 2 rows
 kafka-console-consumer --topic sftp-users --from-beginning --bootstrap-server localhost:9092 
 kafka-console-consumer --topic users --from-beginning --bootstrap-server localhost:9092 
 ```
 
 Create Stream on sftp_users
 ```bash
+ksql http://localhost:8088
 ksql > set 'auto.offset.reset'='earliest';
 ksql > CREATE STREAM SFTP_USERS  
       (id bigint,
@@ -153,7 +158,7 @@ ksql > CREATE STREAM WEEKLY_USERLIST
     SELECT *
     FROM SFTP_USERS 
     PARTITION BY ID;
-# Select frm users
+# Select from users
 ksql > select * from USERS emit changes;
 # Join
 ksql > CREATE STREAM WEEKLY_USERLIST_CHECK
@@ -204,12 +209,14 @@ ksql > CREATE STREAM WEEKLY_USERS_NEED2CHANGE
        w_favorite_color,
        (first_name_check+last_name_check+email_check+gender_check+ip_address_check+last_login_check+account_balance_check+country_check+asfavorite_color_check) as need_to_change 
        from WEEKLY_USERLIST_CHECK emit changes;
-# Get all user need to change
+# Get all user need to change, in this no one.
 ksql > select * from WEEKLY_USERS_NEED2CHANGE where need_to_change > 0 emit changes;
 # Users need to change
 ksql > CREATE STREAM USERS_NEED2CHANGE
     WITH (KAFKA_TOPIC='user_need2change') AS select * from WEEKLY_USERS_NEED2CHANGE where need_to_change > 0 emit changes;
 ```
+
+This weekly user list did not have any changed data. We will have later with hash resolution.
 
 The graphic shows the flow of the ksqlDB statements.
 
@@ -267,11 +274,12 @@ KSQL > CREATE TABLE USERS_HASH
        favorite_color,
        HASH(cast(id as varchar)+first_name+last_name+gender+ip_address+last_login+cast(account_balance as varchar)+favorite_color) as row_hash     
        from USERS;
-# Which weekly userlist user did change?       
+# Which weekly userlist user did change? Again, no change      
 ksql> select w.* 
         from WEEKLY_USERLIST_HASH w
         LEFT join USERS_HASH u on w.ID = u.ID 
          where (w.row_hash != u.row_hash) EMIT CHANGES;
+ksql> exit;         
 ```
 
 Here the flow with UDF
@@ -286,6 +294,23 @@ The connector is looking for `*.json` file. Add a new file to `data` dir.
 ```bash
 echo $'{"id":3,"first_name":"Carsten","last_name":"Muetzlitz","email":"cmutzlitz@confluent.io","gender":"Male","ip_address":"1.84.142.254","last_login":"2024-02-27T06:26:23Z","account_balance":2.22,"country":"DE","favorite_color":"#4eaefa"}\n{"id":4,"first_name":"Suvad","last_name":"Sahovic","email":"suvad@confluent.io","gender":"Male","ip_address":"2.159.106.63","last_login":"2024-02-01T00:29:56Z","account_balance":3.33,"country":"DE","favorite_color":"#e8f686"}' > "data/new_file1.json"
 ```
+
+check again:
+```bash
+ksql http://localhost:8088
+# first case scenario
+ksql> set 'auto.offset.reset'='earliest';
+ksql> select * from USERS_NEED2CHANGE emit changes;
+# two user are found. try now the has sample
+ksql> select w.* 
+        from WEEKLY_USERLIST_HASH w
+        LEFT join USERS_HASH u on w.ID = u.ID 
+         where (w.row_hash != u.row_hash) EMIT CHANGES;
+# The result should be the same
+ksql> exit;         
+```
+
+Now, a process have to be implemented to change the data, so that system list is up2date,
 
 ## Stop your system
 Disable SFTP Server on your Mac. Open System Preferences and select Sharing.Next, make sure that Remote Login is disabled.
